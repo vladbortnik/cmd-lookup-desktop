@@ -1,0 +1,8 @@
+/* Injects Tailwind's base styles and default styling */
+@tailwind base;
+
+/* Injects Tailwind's component classes */
+@tailwind components;
+
+/* Injects Tailwind's utility classes */
+@tailwind utilities;
