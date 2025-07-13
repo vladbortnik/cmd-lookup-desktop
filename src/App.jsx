@@ -18,9 +18,6 @@ function App({ mockCommands }) {
   const [expandedCommands, setExpandedCommands] = useState(() => new Set());
   const containerRef = useRef(null);
   
-  // Artifact window content state
-  const [artifactContent, setArtifactContent] = useState(null);
-  const [isArtifactWindow, setIsArtifactWindow] = useState(false);
 
   useEffect(() => {
     /**
@@ -51,21 +48,6 @@ function App({ mockCommands }) {
     loadCommands().catch(console.error);
   }, [mockCommands]);
 
-  // Detect if this is an artifact window and listen for content
-  useEffect(() => {
-    // Check URL parameters to detect artifact window
-    const urlParams = new URLSearchParams(window.location.search);
-    const isArtifact = urlParams.get('artifact') === 'true';
-    setIsArtifactWindow(isArtifact);
-
-    // Listen for content from main process if this is artifact window
-    if (window.electronAPI?.onDisplayContent) {
-      window.electronAPI.onDisplayContent((contentData) => {
-        setArtifactContent(contentData);
-        setIsArtifactWindow(true);
-      });
-    }
-  }, []);
 
   // Dynamic window resizing based on content
   useEffect(() => {
@@ -210,83 +192,7 @@ function App({ mockCommands }) {
     setExpandedCommands(newExpanded);
   };
 
-  /**
-   * Shows command details in the artifact window
-   * 
-   * @param {Object} command - Command object to display
-   */
-  const showCommandInArtifact = async (command) => {
-    if (window.electronAPI?.showArtifactWindow && window.electronAPI?.sendContentToArtifact) {
-      await window.electronAPI.showArtifactWindow();
-      await window.electronAPI.sendContentToArtifact(command);
-    }
-  };
 
-  // Render artifact window content
-  if (isArtifactWindow) {
-    return (
-      <div className="bg-slate-900 text-white h-screen overflow-auto">
-        <div className="p-6">
-          <div className="border-b border-slate-700 pb-4 mb-6">
-            <h1 className="text-2xl font-bold text-blue-400">Command Details</h1>
-          </div>
-          
-          {artifactContent ? (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-xl font-semibold text-cyan-400 mb-2">
-                  {artifactContent.name}
-                </h2>
-                {artifactContent.standsFor && (
-                  <p className="text-sm text-slate-400 italic mb-3">
-                    {artifactContent.standsFor}
-                  </p>
-                )}
-                <p className="text-slate-300 leading-relaxed">
-                  {artifactContent.description}
-                </p>
-              </div>
-
-              {artifactContent.examples && artifactContent.examples.length > 0 && (
-                <div>
-                  <h3 className="text-lg font-semibold text-purple-400 mb-3">Examples</h3>
-                  <div className="space-y-4">
-                    {artifactContent.examples.map((example, index) => (
-                      <div key={index} className="bg-slate-800 rounded-lg p-4 border border-slate-600">
-                        <div className="font-mono text-sm text-green-400 mb-2">
-                          $ {example.command}
-                        </div>
-                        <div className="text-sm text-slate-300">
-                          {example.description}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {artifactContent.platform && (
-                <div>
-                  <h3 className="text-lg font-semibold text-yellow-400 mb-2">Platform</h3>
-                  <div className="flex gap-2">
-                    {artifactContent.platform.map((platform) => (
-                      <span key={platform} className="px-3 py-1 bg-slate-700 rounded-full text-sm">
-                        {platform}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="text-center text-slate-400 py-8">
-              <p>No content selected. Click a command in the main window to see details here.</p>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
 
   return (
     // <div ref={containerRef} className="bg-slate-900 text-white rounded-lg shadow-2xl overflow-hidden">
@@ -305,13 +211,6 @@ function App({ mockCommands }) {
             autoFocus
           />
 
-          {/* Test Artifact Window Button */}
-          <button 
-            onClick={() => window.electronAPI?.showArtifactWindow()}
-            className="px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white text-sm transition-colors"
-          >
-            Show Artifact
-          </button>
 
           {/* TL;DR Logo - moved to right */}
           <div className="relative overflow-hidden bg-gradient-to-br from-slate-800 via-blue-900 to-purple-900 border-2 border-blue-500/30 rounded-xl h-12 px-4 shadow-xl flex-shrink-0">
@@ -371,7 +270,6 @@ function App({ mockCommands }) {
                   <div
                     key={commandKey}
                     className="bg-slate-800 rounded-lg p-4 border border-slate-700 hover:border-slate-600 transition-all duration-200 cursor-pointer"
-                    onClick={() => showCommandInArtifact(command)}
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
@@ -379,9 +277,6 @@ function App({ mockCommands }) {
                           <h3 className="text-lg font-bold text-blue-400 mb-1">
                             {command.name}
                           </h3>
-                          <span className="text-xs text-slate-500 hover:text-slate-400">
-                            → click for details
-                          </span>
                         </div>
                         {command.standsFor && (
                           <p className="text-xs text-slate-500 italic mb-1">

@@ -26,30 +26,4 @@ contextBridge.exposeInMainWorld('electronAPI', {
    */
   getPlatform: () => ipcRenderer.invoke('get-platform'),
 
-  /**
-   * Show artifact window
-   * @returns {Promise<boolean>} Success status
-   */
-  showArtifactWindow: () => ipcRenderer.invoke('show-artifact-window'),
-
-  /**
-   * Hide artifact window
-   * @returns {Promise<boolean>} Success status
-   */
-  hideArtifactWindow: () => ipcRenderer.invoke('hide-artifact-window'),
-
-  /**
-   * Send content to artifact window
-   * @param {Object} contentData - Content data to display
-   * @returns {Promise<boolean>} Success status
-   */
-  sendContentToArtifact: (contentData) => ipcRenderer.invoke('send-content-to-artifact', contentData),
-
-  /**
-   * Listen for content display events (for artifact window)
-   * @param {Function} callback - Callback function to handle content
-   */
-  onDisplayContent: (callback) => {
-    ipcRenderer.on('display-content', (event, contentData) => callback(contentData));
-  }
 });

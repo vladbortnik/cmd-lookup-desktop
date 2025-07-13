@@ -20,7 +20,6 @@ import { platform } from 'node:process';
 
 // Keep reference to window objects to prevent garbage collection
 let mainWindow = null;
-let artifactWindow = null;
 
 /**
  * Create the main application window
@@ -84,54 +83,6 @@ function createMainWindow() {
   });
 }
 
-/**
- * Create the artifact window for detailed content
- */
-function createArtifactWindow() {
-  // Get main window position and size for relative positioning
-  const [mainX, mainY] = mainWindow.getPosition();
-  const [mainWidth] = mainWindow.getSize();
-  
-  artifactWindow = new BrowserWindow({
-    width: 600,
-    height: 400,
-    x: mainX + mainWidth + 10, // Position to the right of main window
-    y: mainY,
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      preload: new URL('./preload.js', import.meta.url).pathname.replace(/^\/([A-Za-z]):/, '$1:')
-    },
-    show: false,
-    frame: true, // Artifact window can have frame
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    parent: mainWindow // Set main window as parent
-  });
-
-  // Load the same React app but with different route/content
-  const isDev = !app.isPackaged;
-  
-  if (isDev) {
-    artifactWindow.loadURL('http://localhost:5173');
-  } else {
-    artifactWindow.loadFile('dist/index.html');
-  }
-
-  // Handle artifact window closed
-  artifactWindow.on('closed', () => {
-    artifactWindow = null;
-  });
-
-  // Hide artifact window when main window is hidden
-  mainWindow.on('hide', () => {
-    if (artifactWindow) {
-      artifactWindow.hide();
-    }
-  });
-
-  return artifactWindow;
-}
 
 /**
  * Setup IPC handlers for window communication
@@ -164,30 +115,6 @@ function setupIPC() {
     return platform;
   });
 
-  // Handle artifact window requests
-  ipcMain.handle('show-artifact-window', () => {
-    if (!artifactWindow) {
-      createArtifactWindow();
-    }
-    artifactWindow.show();
-    return true;
-  });
-
-  ipcMain.handle('hide-artifact-window', () => {
-    if (artifactWindow) {
-      artifactWindow.hide();
-    }
-    return true;
-  });
-
-  // Handle sending content to artifact window
-  ipcMain.handle('send-content-to-artifact', (event, contentData) => {
-    if (artifactWindow) {
-      artifactWindow.webContents.send('display-content', contentData);
-      return true;
-    }
-    return false;
-  });
 }
 
 /**
