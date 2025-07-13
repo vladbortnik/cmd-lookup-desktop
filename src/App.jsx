@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { FiChevronDown, FiChevronUp, FiTerminal } from "react-icons/fi";
 import "./index.css";
 
@@ -16,6 +16,11 @@ function App({ mockCommands }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [error, setError] = useState(null);
   const [expandedCommands, setExpandedCommands] = useState(() => new Set());
+  const containerRef = useRef(null);
+  
+  // Artifact window content state
+  const [artifactContent, setArtifactContent] = useState(null);
+  const [isArtifactWindow, setIsArtifactWindow] = useState(false);
 
   useEffect(() => {
     /**
@@ -45,6 +50,36 @@ function App({ mockCommands }) {
 
     loadCommands().catch(console.error);
   }, [mockCommands]);
+
+  // Detect if this is an artifact window and listen for content
+  useEffect(() => {
+    // Check URL parameters to detect artifact window
+    const urlParams = new URLSearchParams(window.location.search);
+    const isArtifact = urlParams.get('artifact') === 'true';
+    setIsArtifactWindow(isArtifact);
+
+    // Listen for content from main process if this is artifact window
+    if (window.electronAPI?.onDisplayContent) {
+      window.electronAPI.onDisplayContent((contentData) => {
+        setArtifactContent(contentData);
+        setIsArtifactWindow(true);
+      });
+    }
+  }, []);
+
+  // Dynamic window resizing based on content
+  useEffect(() => {
+    if (containerRef.current && window.electronAPI) {
+      const observer = new ResizeObserver(() => {
+        const height = containerRef.current.scrollHeight + 20; // Add padding
+        window.electronAPI.resizeWindow(600, height);
+      });
+      
+      observer.observe(containerRef.current);
+      
+      return () => observer.disconnect();
+    }
+  }, [searchQuery]);
 
   /**
    * Enhanced fuzzy search algorithm that matches characters in sequence
@@ -98,22 +133,20 @@ function App({ mockCommands }) {
     const nameScore = fuzzySearch(searchTerm, command.name);
     const descriptionScore = fuzzySearch(searchTerm, command.description);
     
-    // For short queries (1-2 characters), prioritize exact name matches heavily
+    // For very short queries (1-2 characters), be extremely restrictive
     if (searchTerm.length <= 2) {
+      // Only exact substring matches in command names
       if (command.name.toLowerCase().includes(searchTerm.toLowerCase())) {
-        return nameScore + 2000; // Very high score for exact substring in name
+        return nameScore + 2000;
       }
-      // For short queries, only allow high-scoring fuzzy matches in descriptions
-      if (descriptionScore > 50) {
-        return descriptionScore;
-      }
+      // No description matches for short queries
       return 0;
     }
     
-    // For longer queries, use the original logic but be more selective
+    // For longer queries, use original logic but be more selective
     if (nameScore > 0) {
-      return nameScore + 1000; // Boost name matches significantly
-    } else if (descriptionScore > 30) { // Higher threshold for description matches
+      return nameScore + 1000;
+    } else if (descriptionScore > 40) { // Even higher threshold
       return descriptionScore;
     }
     
@@ -177,90 +210,155 @@ function App({ mockCommands }) {
     setExpandedCommands(newExpanded);
   };
 
-  return (
-    <div className="min-h-screen bg-slate-900 text-white">
-      <div className="container mx-auto max-w-6xl px-4 py-8">
-        {/* Header */}
-        <header className="mb-12 text-center">
-          <div className="flex items-center justify-center mb-4">
-            <div className="relative w-20 h-20 bg-gradient-to-br from-green-400 to-blue-500 rounded-2xl flex items-center justify-center shadow-2xl">
-              <span className="text-4xl text-white font-bold animate-bounce">$</span>
-              <div className="absolute inset-0 rounded-2xl animate-pulse bg-green-400 opacity-30"></div>
-            </div>
-          </div>
-          <h1 className="text-5xl font-bold text-white mb-3 bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-            TL;DR Commands
-          </h1>
-          <p className="text-xl text-slate-400">Simplified command reference for developers</p>
-        </header>
+  /**
+   * Shows command details in the artifact window
+   * 
+   * @param {Object} command - Command object to display
+   */
+  const showCommandInArtifact = async (command) => {
+    if (window.electronAPI?.showArtifactWindow && window.electronAPI?.sendContentToArtifact) {
+      await window.electronAPI.showArtifactWindow();
+      await window.electronAPI.sendContentToArtifact(command);
+    }
+  };
 
-        {/* Search box with logo */}
-        <div className="mb-8">
-          <div className="flex items-center gap-3">
-            <div className="relative flex-1">
-              <input
-                type="text"
-                placeholder="Search commands..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full p-4 text-lg bg-slate-800 border-2 border-slate-700 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
-              />
-              <div className="absolute inset-0 rounded-xl bg-blue-500/10 opacity-0 focus-within:opacity-100 transition-opacity duration-200 pointer-events-none"></div>
-            </div>
-            {/* TL;DR Logo moved here */}
-            <div className="relative overflow-hidden bg-gradient-to-br from-slate-800 via-blue-900 to-purple-900 border-2 border-blue-500/30 rounded-2xl h-16 px-6 shadow-2xl">
-              {/* Background glow effect */}
-              <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-cyan-500/10 animate-pulse"></div>
-              
-              {/* Main content */}
-              <div className="relative flex items-center gap-4 h-full">
-                {/* Enhanced terminal icon */}
-                <div className="relative">
-                  <div className="w-8 h-8 bg-gradient-to-br from-cyan-400 via-blue-500 to-purple-600 rounded-lg flex items-center justify-center shadow-lg">
-                    <FiTerminal className="text-white text-lg" style={{strokeWidth: 2.5}} />
-                  </div>
-                  <div className="absolute -inset-1 bg-gradient-to-r from-cyan-400 to-purple-600 rounded-lg opacity-30 animate-ping"></div>
-                </div>
-                
-                {/* Modern typography */}
-                <div className="flex items-center">
-                  <span className="text-2xl font-black bg-gradient-to-r from-white via-cyan-200 to-blue-200 bg-clip-text text-transparent">
-                    TL
-                  </span>
-                  <span className="text-cyan-400 text-xl font-light mx-1">;</span>
-                  <span className="text-2xl font-black bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 bg-clip-text text-transparent">
-                    DR
-                  </span>
-                </div>
+  // Render artifact window content
+  if (isArtifactWindow) {
+    return (
+      <div className="bg-slate-900 text-white h-screen overflow-auto">
+        <div className="p-6">
+          <div className="border-b border-slate-700 pb-4 mb-6">
+            <h1 className="text-2xl font-bold text-blue-400">Command Details</h1>
+          </div>
+          
+          {artifactContent ? (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-xl font-semibold text-cyan-400 mb-2">
+                  {artifactContent.name}
+                </h2>
+                {artifactContent.standsFor && (
+                  <p className="text-sm text-slate-400 italic mb-3">
+                    {artifactContent.standsFor}
+                  </p>
+                )}
+                <p className="text-slate-300 leading-relaxed">
+                  {artifactContent.description}
+                </p>
               </div>
-              
-              {/* Subtle animated border */}
-              <div className="absolute inset-0 rounded-2xl border border-blue-400/20 animate-pulse"></div>
+
+              {artifactContent.examples && artifactContent.examples.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold text-purple-400 mb-3">Examples</h3>
+                  <div className="space-y-4">
+                    {artifactContent.examples.map((example, index) => (
+                      <div key={index} className="bg-slate-800 rounded-lg p-4 border border-slate-600">
+                        <div className="font-mono text-sm text-green-400 mb-2">
+                          $ {example.command}
+                        </div>
+                        <div className="text-sm text-slate-300">
+                          {example.description}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {artifactContent.platform && (
+                <div>
+                  <h3 className="text-lg font-semibold text-yellow-400 mb-2">Platform</h3>
+                  <div className="flex gap-2">
+                    {artifactContent.platform.map((platform) => (
+                      <span key={platform} className="px-3 py-1 bg-slate-700 rounded-full text-sm">
+                        {platform}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
+          ) : (
+            <div className="text-center text-slate-400 py-8">
+              <p>No content selected. Click a command in the main window to see details here.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    // <div ref={containerRef} className="bg-slate-900 text-white rounded-lg shadow-2xl overflow-hidden">
+      <div ref={containerRef} className="bg-slate-900 text-white rounded-lg overflow-hidden">
+      <div className="p-4">
+        {/* Desktop: Compact search bar with logo on same line */}
+        {/*<div className="flex items-center gap-3 mb-4">*/}
+        <div className="flex items-center gap-3">
+        {/* Search Input */}
+          <input
+            type="text"
+            placeholder="Search commands..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="flex-1 p-3 text-base bg-slate-800 border-2 border-slate-700 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+            autoFocus
+          />
+
+          {/* Test Artifact Window Button */}
+          <button 
+            onClick={() => window.electronAPI?.showArtifactWindow()}
+            className="px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white text-sm transition-colors"
+          >
+            Show Artifact
+          </button>
+
+          {/* TL;DR Logo - moved to right */}
+          <div className="relative overflow-hidden bg-gradient-to-br from-slate-800 via-blue-900 to-purple-900 border-2 border-blue-500/30 rounded-xl h-12 px-4 shadow-xl flex-shrink-0">
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-cyan-500/10 animate-pulse"></div>
+            <div className="relative flex items-center gap-2 h-full">
+              <div className="relative">
+                <div className="w-6 h-6 bg-gradient-to-br from-cyan-400 via-blue-500 to-purple-600 rounded-md flex items-center justify-center shadow-lg">
+                  <FiTerminal className="text-white text-sm" style={{strokeWidth: 2.5}} />
+                </div>
+                <div className="absolute -inset-1 bg-gradient-to-r from-cyan-400 to-purple-600 rounded-md opacity-30 animate-ping"></div>
+              </div>
+              <div className="flex items-center">
+                <span className="text-lg font-black bg-gradient-to-r from-white via-cyan-200 to-blue-200 bg-clip-text text-transparent">
+                  TL
+                </span>
+                <span className="text-cyan-400 text-sm font-light mx-0.5">;</span>
+                <span className="text-lg font-black bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 bg-clip-text text-transparent">
+                  DR
+                </span>
+              </div>
+            </div>
+            <div className="absolute inset-0 rounded-xl border border-blue-400/20 animate-pulse"></div>
           </div>
         </div>
 
         {/* Error state */}
         {error && (
-          <div className="bg-red-900/20 border-l-4 border-red-500 text-red-300 p-4 mb-6 rounded-r-lg">
-            <p>{error}</p>
+          <div className="bg-red-900/20 border-l-4 border-red-500 text-red-300 p-3 mb-4 rounded-r-lg">
+            <p className="text-sm">{error}</p>
           </div>
         )}
 
         {/* Loading state */}
         {isLoading ? (
-          <div className="text-center p-8">
-            <p className="text-slate-400">Loading commands...</p>
+          <div className="text-center py-4">
+            <p className="text-slate-400 text-sm">Loading...</p>
           </div>
         ) : (
-          <div>
-            {/* Results count */}
-            <p className="mb-6 text-sm text-slate-400">
-              {displayCommands.length} found
-            </p>
+          searchQuery.trim() ? (
+            <div>
+              {/* Results count */}
+              <p className="mb-3 text-xs text-slate-500">
+                {displayCommands.length} found
+              </p>
 
-            {/* Command list - with key to force re-render on search */}
-            <div className="space-y-4" key={`search-results-${searchQuery}`}>
+            {/* Command list - compact for desktop */}
+            <div className="space-y-2" key={`search-results-${searchQuery}`}>
               {displayCommands.map((command, index) => {
                 const commandKey = `${command.name}-${index}`;
                 const isExpanded = expandedCommands.has(commandKey);
@@ -272,38 +370,37 @@ function App({ mockCommands }) {
                 return (
                   <div
                     key={commandKey}
-                    className="bg-slate-800 rounded-xl p-6 border border-slate-700 hover:border-slate-600 transition-all duration-200"
+                    className="bg-slate-800 rounded-lg p-4 border border-slate-700 hover:border-slate-600 transition-all duration-200 cursor-pointer"
+                    onClick={() => showCommandInArtifact(command)}
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        <h2 className="text-2xl font-bold text-blue-400 mb-1">
-                          {command.name}
-                        </h2>
-                        {/* Display standsFor if available */}
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-lg font-bold text-blue-400 mb-1">
+                            {command.name}
+                          </h3>
+                          <span className="text-xs text-slate-500 hover:text-slate-400">
+                            → click for details
+                          </span>
+                        </div>
                         {command.standsFor && (
-                          <p className="text-sm text-slate-500 italic mb-2">
+                          <p className="text-xs text-slate-500 italic mb-1">
                             {command.standsFor}
                           </p>
                         )}
-                        <p className="text-slate-300 mb-4">{command.description}</p>
+                        <p className="text-slate-300 text-sm mb-2">{command.description}</p>
                       </div>
-                      <div className="flex items-center space-x-2 ml-4">
-                        {/* Display platforms/categories */}
+                      <div className="flex items-center space-x-1 ml-3">
                         {command.platform &&
                           command.platform.length > 0 &&
-                          command.platform.map((platform) => (
+                          command.platform.slice(0, 2).map((platform) => (
                             <span
                               key={platform}
-                              className="bg-blue-500/20 text-blue-300 text-xs px-2 py-1 rounded-full"
+                              className="bg-blue-500/20 text-blue-300 text-xs px-1.5 py-0.5 rounded"
                             >
                               {platform}
                             </span>
                           ))}
-                        {command.category && (
-                          <span className="bg-emerald-500/20 text-emerald-300 text-xs px-2 py-1 rounded-full">
-                            {command.category}
-                          </span>
-                        )}
                       </div>
                     </div>
 
@@ -351,6 +448,7 @@ function App({ mockCommands }) {
               })}
             </div>
           </div>
+          ) : null
         )}
       </div>
     </div>
